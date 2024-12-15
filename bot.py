@@ -5,12 +5,11 @@ from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
-    CallbackContext,
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # Telegram Bot Token
-TELEGRAM_TOKEN = "8082481347:AAE253rGJUIbPhgxwHAmOVAnf2oZaBcjAbs"
+TELEGRAM_TOKEN = "8082481347:AAE6UBM6i8QfghbmplpkeTfIv_Ue8v9Zot4"
 
 # Solscan API Key (Replace with your provided API key)
 SOLSCAN_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjcmVhdGVkQXQiOjE3MzQyNjQ1Mjk1MTcsImVtYWlsIjoic29uZ2luZGlhbjE2QGdtYWlsLmNvbSIsImFjdGlvbiI6InRva2VuLWFwaSIsImFwaVZlcnNpb24iOiJ2MiIsImlhdCI6MTczNDI2NDUyOX0.gTWa20HeXjgBhbqH2t0XyjU0W030Hd1Ck5HLBmSeXgU"
@@ -97,7 +96,6 @@ async def fetch_and_notify(application: Application) -> None:
 
 # Main function
 def main():
-    # Create the asyncio event loop
     asyncio.run(async_main())
 
 
@@ -116,8 +114,14 @@ async def async_main():
 
     # Start the bot
     print("Bot is running...")
-    await application.run_polling()
+    try:
+        await application.run_polling()
+    finally:
+        # Shutdown scheduler and clean up
+        await application.shutdown()
+        scheduler.shutdown(wait=False)
 
 
 if __name__ == "__main__":
     main()
+                        
