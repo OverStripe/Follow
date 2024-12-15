@@ -1,0 +1,13 @@
+{
+    "rpc_url": "https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY",
+    "telegram_bot_token": "8082481347:AAGzSwoIqXj3CdR2l-IQGk_IHW64JQncq10",
+    "telegram_user_id": "7202072688",
+    "exchange_wallets": [
+        "A77HErqtfN1hLLpvZ9pCtu66FEtM8BveoaKbbMoZ4RiR",
+        "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9",
+        "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+        "BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6",
+        "5VCwKtCXgCJ6kit5FybXjvriW3xELsFDhYrPSqtJNmcD",
+        "AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2"
+    ]
+}
