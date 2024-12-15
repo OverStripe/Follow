@@ -8,7 +8,7 @@ from telegram.ext import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # Telegram Bot Token
-TELEGRAM_TOKEN = "8082481347:AAE6UBM6i8QfghbmplpkeTfIv_Ue8v9Zot4"
+TELEGRAM_TOKEN = "8082481347:AAGsTOVI-k6Y3qWKDHkTCuhkVk7qr1-R9wY"
 
 # Solscan API Key
 SOLSCAN_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjcmVhdGVkQXQiOjE3MzQyNjQ1Mjk1MTcsImVtYWlsIjoic29uZ2luZGlhbjE2QGdtYWlsLmNvbSIsImFjdGlvbiI6InRva2VuLWFwaSIsImFwaVZlcnNpb24iOiJ2MiIsImlhdCI6MTczNDI2NDUyOX0.gTWa20HeXjgBhbqH2t0XyjU0W030Hd1Ck5HLBmSeXgU"
@@ -45,13 +45,11 @@ async def change(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Usage: /change <amount>")
 
 
-# Fetch transactions and notify users
+# Fetch transactions for all coins and notify users
 async def fetch_and_notify(application: Application) -> None:
     global processed_transactions
 
-    # Example token address (replace with the actual token address you want to monitor)
-    token_address = "TOKEN_ADDRESS_HERE"  # Replace with your desired token address
-    url = f"{SOLSCAN_API_BASE}/token/{token_address}/transfers"
+    url = f"{SOLSCAN_API_BASE}/transactions/latest"  # Endpoint for recent transactions
 
     headers = {
         "Authorization": f"Bearer {SOLSCAN_API_KEY}",
@@ -66,10 +64,13 @@ async def fetch_and_notify(application: Application) -> None:
 
     # Process transactions
     data = response.json()
-    transfers = data.get("data", [])
-    for transfer in transfers:
-        tx_hash = transfer.get("txHash")
-        amount = float(transfer.get("amount", 0))
+    transactions = data.get("data", [])
+    for transaction in transactions:
+        tx_hash = transaction.get("txHash")
+        token_symbol = transaction.get("tokenSymbol", "Unknown Token")
+        amount = float(transaction.get("amount", 0))
+        source = transaction.get("source", "N/A")
+        destination = transaction.get("destination", "N/A")
 
         # Skip already processed transactions
         if tx_hash in processed_transactions:
@@ -82,12 +83,13 @@ async def fetch_and_notify(application: Application) -> None:
             if amount >= threshold:
                 # Prepare message with transaction details
                 message = (
-                    f"New Transfer Detected:\n"
+                    f"New Transaction Detected:\n"
+                    f"- Token: {token_symbol}\n"
                     f"- Amount: {amount}\n"
-                    f"- Sender: {transfer.get('source', 'N/A')}\n"
-                    f"- Receiver: {transfer.get('destination', 'N/A')}\n"
+                    f"- Sender: {source}\n"
+                    f"- Receiver: {destination}\n"
                     f"- Tx Hash: {tx_hash}\n"
-                    f"- Timestamp: {transfer.get('blockTime', 'N/A')}"
+                    f"- Timestamp: {transaction.get('blockTime', 'N/A')}"
                 )
                 bot: Bot = application.bot
                 await bot.send_message(chat_id=chat_id, text=message)
