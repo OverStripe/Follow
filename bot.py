@@ -11,7 +11,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 # Telegram Bot Token
 TELEGRAM_TOKEN = "8082481347:AAE6UBM6i8QfghbmplpkeTfIv_Ue8v9Zot4"
 
-# Solscan API Key (Replace with your provided API key)
+# Solscan API Key
 SOLSCAN_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjcmVhdGVkQXQiOjE3MzQyNjQ1Mjk1MTcsImVtYWlsIjoic29uZ2luZGlhbjE2QGdtYWlsLmNvbSIsImFjdGlvbiI6InRva2VuLWFwaSIsImFwaVZlcnNpb24iOiJ2MiIsImlhdCI6MTczNDI2NDUyOX0.gTWa20HeXjgBhbqH2t0XyjU0W030Hd1Ck5HLBmSeXgU"
 
 # Solscan API Base URL
@@ -96,7 +96,15 @@ async def fetch_and_notify(application: Application) -> None:
 
 # Main function
 def main():
-    asyncio.run(async_main())
+    # Avoid closing the running event loop in Python 3.12
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(async_main())
+    finally:
+        # Properly shutdown the loop
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
 
 
 async def async_main():
@@ -124,4 +132,4 @@ async def async_main():
 
 if __name__ == "__main__":
     main()
-                        
+    
