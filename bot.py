@@ -1,4 +1,3 @@
-import asyncio
 import requests
 from telegram import Update, Bot
 from telegram.ext import (
@@ -96,18 +95,6 @@ async def fetch_and_notify(application: Application) -> None:
 
 # Main function
 def main():
-    # Avoid closing the running event loop in Python 3.12
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(async_main())
-    finally:
-        # Properly shutdown the loop
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        loop.close()
-
-
-async def async_main():
     # Telegram application setup
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
@@ -120,16 +107,10 @@ async def async_main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("change", change))
 
-    # Start the bot
+    # Start the bot and let Application manage the event loop
     print("Bot is running...")
-    try:
-        await application.run_polling()
-    finally:
-        # Shutdown scheduler and clean up
-        await application.shutdown()
-        scheduler.shutdown(wait=False)
+    application.run_polling()
 
 
 if __name__ == "__main__":
     main()
-    
