@@ -13,7 +13,7 @@ EXCHANGE_WALLETS = [
 ]
 
 # Telegram Bot Token
-TELEGRAM_BOT_TOKEN = "7709293848:AAFfLflnEyOiwRxsR6hDoKL910pSVZn09Hs"  # Replace with your bot token
+TELEGRAM_BOT_TOKEN = "7118561422:AAF_Is-BTZs9-BifnK40owJ2IY8Ts5kZ8sE"  # Replace with your bot token
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
 # Subscribed users and processed transactions
