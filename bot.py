@@ -1,175 +1,128 @@
 import requests
-import random
-import time
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+import json
+import asyncio
+import logging
+from telegram import Bot
+from typing import List, Dict
 
-# Constants
-TELEGRAM_BOT_TOKEN = "8082481347:AAH45hUl4NzxT6f9xqD5X3OV9rcF1FZCWrs"  # Replace with your Telegram Bot token
-MAIL_TM_BASE_URL = "https://api.mail.tm"
-PUMP_FUN_SIGNUP_URL = "https://pump.fun/signup"
-PUMP_FUN_LOGIN_URL = "https://pump.fun/api/login"
-PUMP_FUN_COMMENT_URL = "https://pump.fun/api/comments/{}"  # Format with coin address
-DEFAULT_PASSWORD = "SecurePassword123!"
-HEADERS = {"Content-Type": "application/json"}
+# Setup logging
+logging.basicConfig(filename="wallet_monitor.log", level=logging.INFO, 
+                    format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Predefined Comment Templates
-TEMPLATES = [
-    "This project, {}, has amazing potential! 🚀",
-    "I'm really excited about {}. The future looks bright!",
-    "Don't miss out on {} – this could be huge!",
-    "Check out {} – it's trending for all the right reasons!",
-    "I've been following {}, and it's showing great promise!"
-]
+# Load configuration
+with open("config.json", "r") as config_file:
+    config = json.load(config_file)
 
-# Step 1: Create Temporary Email
-def create_temp_email():
-    response = requests.post(f"{MAIL_TM_BASE_URL}/accounts", json={
-        "address": None,
-        "password": DEFAULT_PASSWORD
-    })
-    if response.status_code == 201:
-        email_data = response.json()
-        return email_data["address"], email_data["id"]
-    else:
-        return None, None
+rpc_url = config["rpc_url"]
+telegram_bot_token = config["telegram_bot_token"]
+telegram_user_id = config["telegram_user_id"]
+exchange_wallets = config["exchange_wallets"]
 
-# Step 2: Fetch Email Verification Link
-def get_verification_email(email_address):
-    token_response = requests.post(f"{MAIL_TM_BASE_URL}/token", json={
-        "address": email_address,
-        "password": DEFAULT_PASSWORD
-    })
-    if token_response.status_code != 200:
-        return None
+bot = Bot(token=telegram_bot_token)
 
-    token = token_response.json()["token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    for _ in range(10):  # Retry for 50 seconds
-        inbox_response = requests.get(f"{MAIL_TM_BASE_URL}/messages", headers=headers)
-        if inbox_response.status_code == 200 and inbox_response.json():
-            messages = inbox_response.json()
-            for message in messages:
-                if "verification" in message["subject"].lower():
-                    message_id = message["id"]
-                    verification_response = requests.get(
-                        f"{MAIL_TM_BASE_URL}/messages/{message_id}",
-                        headers=headers
-                    )
-                    if verification_response.status_code == 200:
-                        content = verification_response.json()
-                        return extract_verification_link(content["html"])
-        time.sleep(5)
-    return None
-
-# Helper: Extract Verification Link from Email Content
-def extract_verification_link(html_content):
-    import re
-    match = re.search(r'href=[\'"]?([^\'" >]+)', html_content)
-    return match.group(1) if match else None
-
-# Step 3: Verify Account
-def verify_account(verification_link):
-    response = requests.get(verification_link)
-    return response.status_code == 200
-
-# Step 4: Login
-def login(email, password):
-    response = requests.post(PUMP_FUN_LOGIN_URL, json={"email": email, "password": password}, headers=HEADERS)
-    if response.status_code == 200:
-        return response.json()["token"]
-    else:
-        return None
-
-# Step 5: Post Comment
-def post_comment(token, coin_address, comment_text):
-    url = PUMP_FUN_COMMENT_URL.format(coin_address)
-    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
-    response = requests.post(url, json={"comment": comment_text}, headers=headers)
-    return response.status_code == 200
-
-# Generate Comment
-def generate_comment(coin_name, use_ai=False):
-    if use_ai:
-        return generate_ai_comment(coin_name)
-    else:
-        template = random.choice(TEMPLATES)
-        return template.format(coin_name)
-
-# Optional: AI-Based Comment Generator
-def generate_ai_comment(coin_name):
-    from transformers import pipeline
-    generator = pipeline("text-generation", model="gpt2")
-    prompt = f"Write an engaging comment about the cryptocurrency {coin_name}:"
-    generated = generator(prompt, max_length=50, num_return_sequences=1)
-    return generated[0]["generated_text"]
-
-# Full Automation Workflow
-def automate_commenting(coin_address, coin_name, use_ai=False):
-    email_address, email_id = create_temp_email()
-    if not email_address:
-        return "Failed to create temporary email."
-
-    verification_link = get_verification_email(email_address)
-    if not verification_link:
-        return "Verification email not received."
-
-    if not verify_account(verification_link):
-        return "Failed to verify account."
-
-    token = login(email_address, DEFAULT_PASSWORD)
-    if not token:
-        return "Login failed."
-
-    comment_text = generate_comment(coin_name, use_ai=use_ai)
-    if post_comment(token, coin_address, comment_text):
-        return f"Comment posted successfully on {coin_address} with text: {comment_text}"
-    else:
-        return "Failed to post comment."
-
-# Telegram Bot Commands
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Welcome! Use the command /help to understand how to use this bot."
-    )
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Send the coin address and name in this format: \n"
-        "/comment <coin_address> <coin_name>\n"
-        "Example: /comment example_coin_address AmazingCoin"
-    )
-
-async def comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Function to get signatures for the address
+def get_signatures_for_address(pubkey: str, limit: int = 5) -> Dict:
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getSignaturesForAddress",
+        "params": [pubkey, {"limit": limit}],
+    }
     try:
-        args = context.args
-        if len(args) < 2:
-            await update.message.reply_text("Usage: /comment <coin_address> <coin_name>")
-            return
-
-        coin_address = args[0]
-        coin_name = " ".join(args[1:])
-        await update.message.reply_text(f"Starting commenting process on {coin_address}...")
-
-        # Automate Commenting
-        result = automate_commenting(coin_address, coin_name, use_ai=False)
-        await update.message.reply_text(result)
+        response = requests.post(rpc_url, json=payload)
+        response.raise_for_status()
+        return response.json()
     except Exception as e:
-        await update.message.reply_text(f"An error occurred: {str(e)}")
+        logging.error(f"Error fetching signatures for {pubkey}: {e}")
+        return {}
 
-# Main Function
-def main():
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+# Function to get transaction details for a given signature
+def get_transaction(signature: str) -> Dict:
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getTransaction",
+        "params": [signature, {"maxSupportedTransactionVersion": 0}],
+    }
+    try:
+        response = requests.post(rpc_url, json=payload)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logging.error(f"Error fetching transaction details for {signature}: {e}")
+        return {}
 
-    # Register Handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("comment", comment))
+# Function to get token metadata from CoinGecko
+def get_token_metadata(token_address: str) -> Dict:
+    try:
+        # Replace with actual CoinGecko API endpoint or a relevant Solana API
+        coingecko_url = f"https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses={token_address}&vs_currencies=usd"
+        response = requests.get(coingecko_url)
+        response.raise_for_status()
+        data = response.json()
+        return data.get(token_address, {})
+    except Exception as e:
+        logging.error(f"Error fetching metadata for token {token_address}: {e}")
+        return {"market_cap": "Unknown"}
 
-    # Start the Bot
-    application.run_polling()
+# Monitor wallets for new transactions and notify on coin purchases
+async def monitor_wallets():
+    processed_signatures = set()
+    processed_wallets = set()
 
-# Execute Script
+    while True:
+        for wallet in exchange_wallets:
+            signatures_response = get_signatures_for_address(wallet)
+            if "result" not in signatures_response or len(signatures_response["result"]) == 0:
+                continue
+
+            for signature_info in signatures_response["result"]:
+                signature = signature_info["signature"]
+
+                # Skip if already processed
+                if signature in processed_signatures:
+                    continue
+                processed_signatures.add(signature)
+
+                # Get transaction details
+                transaction_response = get_transaction(signature)
+                if "result" not in transaction_response or not transaction_response["result"]:
+                    continue
+
+                transaction = transaction_response["result"]
+                message = transaction["transaction"]["message"]
+                account_keys = message["accountKeys"]
+                instructions = message["instructions"]
+
+                # Detect new wallets receiving funds
+                for account in account_keys[1:]:
+                    if account not in processed_wallets:
+                        processed_wallets.add(account)
+
+                        logging.info(f"New wallet detected: {account}")
+
+                        # Check if any instruction indicates a token transfer (coin purchase)
+                        for instruction in instructions:
+                            program_id = instruction.get("programId")
+                            if program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA":  # Token program
+                                token_address = account_keys[instruction["accounts"][-1]]
+                                token_data = get_token_metadata(token_address)
+                                market_cap = token_data.get("usd", "Unknown")
+
+                                # Send notification
+                                notification_message = (
+                                    f"New wallet detected: {account}\n"
+                                    f"Coin purchased: {token_address}\n"
+                                    f"Market Cap: {market_cap} USD\n"
+                                )
+                                await bot.send_message(chat_id=telegram_user_id, text=notification_message)
+
+        await asyncio.sleep(60)
+
+# Entry point
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(monitor_wallets())
+    except Exception as e:
+        logging.error(f"Error in monitor_wallets: {e}")
+        
