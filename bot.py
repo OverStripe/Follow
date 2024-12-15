@@ -9,7 +9,7 @@ from telegram.ext import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # Telegram Bot Token
-TELEGRAM_TOKEN = "8082481347:AAEqgecNLjPckTPA-TQIH2-3g8-0B9O3HlA"
+TELEGRAM_TOKEN = "8082481347:AAGl1LqSwQgWoaX-GBIKtdcTncebS6HQl3o"
 
 # Solscan URL for scraping
 SOLSCAN_URL = "https://solscan.io/"
