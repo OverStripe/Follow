@@ -8,7 +8,7 @@ from telegram.ext import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # Telegram Bot Token
-TELEGRAM_TOKEN = "8082481347:AAHsOeUtTM9LuEdij2CWWVNAtIa36R58bmA"
+TELEGRAM_TOKEN = "8082481347:AAEBpazl2x-vMI4J-VN7YE2Vst9kXD_Eigw"
 
 # Solscan API Key
 SOLSCAN_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjcmVhdGVkQXQiOjE3MzQyNjQ1Mjk1MTcsImVtYWlsIjoic29uZ2luZGlhbjE2QGdtYWlsLmNvbSIsImFjdGlvbiI6InRva2VuLWFwaSIsImFwaVZlcnNpb24iOiJ2MiIsImlhdCI6MTczNDI2NDUyOX0.gTWa20HeXjgBhbqH2t0XyjU0W030Hd1Ck5HLBmSeXgU"
@@ -29,7 +29,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if chat_id not in subscribed_users:
         subscribed_users.add(chat_id)
         await update.message.reply_text(
-            "You are now subscribed to receive all transactions."
+            "You are now subscribed to receive coin purchase notifications."
         )
     else:
         await update.message.reply_text("You are already subscribed.")
@@ -40,7 +40,7 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     if chat_id in subscribed_users:
         subscribed_users.remove(chat_id)
-        await update.message.reply_text("You have unsubscribed from transaction alerts.")
+        await update.message.reply_text("You have unsubscribed from purchase notifications.")
     else:
         await update.message.reply_text("You are not subscribed.")
 
@@ -68,9 +68,9 @@ async def fetch_and_notify(application: Application) -> None:
     for transaction in transactions:
         tx_hash = transaction.get("txHash")
         token_symbol = transaction.get("tokenSymbol", "Unknown Token")
-        amount = transaction.get("amount", 0)
-        source = transaction.get("source", "N/A")
-        destination = transaction.get("destination", "N/A")
+        amount = float(transaction.get("amount", 0))
+        buyer = transaction.get("source", "N/A")  # Buyer address
+        seller = transaction.get("destination", "N/A")  # Seller address
 
         # Skip already processed transactions
         if tx_hash in processed_transactions:
@@ -78,19 +78,21 @@ async def fetch_and_notify(application: Application) -> None:
 
         processed_transactions.add(tx_hash)
 
-        # Send transaction details to all subscribed users
-        for chat_id in subscribed_users:
-            message = (
-                f"New Transaction Detected:\n"
-                f"- Token: {token_symbol}\n"
-                f"- Amount: {amount}\n"
-                f"- Sender: {source}\n"
-                f"- Receiver: {destination}\n"
-                f"- Tx Hash: {tx_hash}\n"
-                f"- Timestamp: {transaction.get('blockTime', 'N/A')}"
-            )
-            bot: Bot = application.bot
-            await bot.send_message(chat_id=chat_id, text=message)
+        # Identify "buy" transactions
+        if amount > 0 and buyer != "N/A" and seller != "N/A":
+            # Notify all subscribed users
+            for chat_id in subscribed_users:
+                message = (
+                    f"🚨 New Coin Purchase Detected 🚨\n"
+                    f"- Token: {token_symbol}\n"
+                    f"- Amount Bought: {amount}\n"
+                    f"- Buyer: {buyer}\n"
+                    f"- Seller: {seller}\n"
+                    f"- Tx Hash: {tx_hash}\n"
+                    f"- Timestamp: {transaction.get('blockTime', 'N/A')}"
+                )
+                bot: Bot = application.bot
+                await bot.send_message(chat_id=chat_id, text=message)
 
 
 # Main function
@@ -98,9 +100,9 @@ def main():
     # Telegram application setup
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # Schedule task to fetch transactions periodically
+    # Schedule task to fetch transactions every 10 seconds
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(fetch_and_notify, "interval", seconds=60, args=[application])
+    scheduler.add_job(fetch_and_notify, "interval", seconds=10, args=[application])  # 10-second interval
     scheduler.start()
 
     # Command handlers
