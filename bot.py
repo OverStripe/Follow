@@ -1,4 +1,3 @@
-import time
 import requests
 from telegram import Update, Bot
 from telegram.ext import (
@@ -7,6 +6,7 @@ from telegram.ext import (
     ContextTypes,
     CallbackContext,
 )
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # Telegram Bot Token
 TELEGRAM_TOKEN = "8082481347:AAEx9n_F4tQBskUS0sGmCqQJLnP375fiq4Y"
@@ -50,8 +50,8 @@ async def change(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def fetch_and_notify(application: Application) -> None:
     global processed_transactions
 
-    # Example token address (replace with actual token address you want to monitor)
-    token_address = "TOKEN_ADDRESS_HERE"
+    # Example token address (replace with the actual token address you want to monitor)
+    token_address = "TOKEN_ADDRESS_HERE"  # Replace with your desired token address
     url = f"{SOLSCAN_API_BASE}/token/{token_address}/transfers"
 
     headers = {
@@ -99,12 +99,14 @@ def main():
     # Telegram application setup
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
+    # Schedule task to fetch transactions periodically
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(fetch_and_notify, "interval", seconds=60, args=[application])
+    scheduler.start()
+
     # Command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("change", change))
-
-    # Job queue for fetching transactions
-    application.job_queue.run_repeating(fetch_and_notify, interval=60, first=10, data=application)
 
     # Start the bot
     print("Bot is running...")
@@ -113,4 +115,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-  
+    
