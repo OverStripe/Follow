@@ -13,7 +13,7 @@ PUMP_FUN_COMMENT_URL = "https://pump.fun/api/comments/{}"  # Format with coin ad
 DEFAULT_PASSWORD = "SecurePassword123!"
 HEADERS = {"Content-Type": "application/json"}
 
-# Predefined Templates
+# Predefined Comment Templates
 TEMPLATES = [
     "This project, {}, has amazing potential! 🚀",
     "I'm really excited about {}. The future looks bright!",
@@ -22,7 +22,7 @@ TEMPLATES = [
     "I've been following {}, and it's showing great promise!"
 ]
 
-# Step 1: Create a Temporary Email Account
+# Step 1: Create Temporary Email
 def create_temp_email():
     response = requests.post(f"{MAIL_TM_BASE_URL}/accounts", json={
         "address": None,
@@ -46,7 +46,7 @@ def get_verification_email(email_address):
     token = token_response.json()["token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    for _ in range(10):  # Retry for email for up to 50 seconds
+    for _ in range(10):  # Retry for 50 seconds
         inbox_response = requests.get(f"{MAIL_TM_BASE_URL}/messages", headers=headers)
         if inbox_response.status_code == 200 and inbox_response.json():
             messages = inbox_response.json()
@@ -69,12 +69,12 @@ def extract_verification_link(html_content):
     match = re.search(r'href=[\'"]?([^\'" >]+)', html_content)
     return match.group(1) if match else None
 
-# Step 3: Verify Account Using the Link
+# Step 3: Verify Account
 def verify_account(verification_link):
     response = requests.get(verification_link)
     return response.status_code == 200
 
-# Step 4: Login and Get Authentication Token
+# Step 4: Login
 def login(email, password):
     response = requests.post(PUMP_FUN_LOGIN_URL, json={"email": email, "password": password}, headers=HEADERS)
     if response.status_code == 200:
@@ -82,14 +82,14 @@ def login(email, password):
     else:
         return None
 
-# Step 5: Post a Comment on the Coin
+# Step 5: Post Comment
 def post_comment(token, coin_address, comment_text):
     url = PUMP_FUN_COMMENT_URL.format(coin_address)
     headers = {**HEADERS, "Authorization": f"Bearer {token}"}
     response = requests.post(url, json={"comment": comment_text}, headers=headers)
     return response.status_code == 200
 
-# Comment Generation
+# Generate Comment
 def generate_comment(coin_name, use_ai=False):
     if use_ai:
         return generate_ai_comment(coin_name)
@@ -97,7 +97,7 @@ def generate_comment(coin_name, use_ai=False):
         template = random.choice(TEMPLATES)
         return template.format(coin_name)
 
-# Optional: AI-Based Comment Generator (requires transformers)
+# Optional: AI-Based Comment Generator
 def generate_ai_comment(coin_name):
     from transformers import pipeline
     generator = pipeline("text-generation", model="gpt2")
@@ -105,7 +105,7 @@ def generate_ai_comment(coin_name):
     generated = generator(prompt, max_length=50, num_return_sequences=1)
     return generated[0]["generated_text"]
 
-# Full Workflow for One Account
+# Full Automation Workflow
 def automate_commenting(coin_address, coin_name, use_ai=False):
     email_address, email_id = create_temp_email()
     if not email_address:
@@ -152,13 +152,13 @@ def comment(update: Update, context: CallbackContext):
         coin_name = " ".join(args[1:])
         update.message.reply_text(f"Starting commenting process on {coin_address}...")
 
-        # Automate Commenting with Dynamic Text
-        result = automate_commenting(coin_address, coin_name)
+        # Automate Commenting
+        result = automate_commenting(coin_address, coin_name, use_ai=False)
         update.message.reply_text(result)
     except Exception as e:
         update.message.reply_text(f"An error occurred: {str(e)}")
 
-# Main Function to Start the Bot
+# Main Function
 def main():
     updater = Updater(TELEGRAM_BOT_TOKEN)
     dispatcher = updater.dispatcher
@@ -172,7 +172,6 @@ def main():
     updater.start_polling()
     updater.idle()
 
-# Execute the Bot
+# Execute Script
 if __name__ == "__main__":
     main()
-      
