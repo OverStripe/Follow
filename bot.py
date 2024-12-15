@@ -21,6 +21,28 @@ subscribed_users = set()
 processed_signatures = set()
 
 
+# Telegram command: /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    if chat_id not in subscribed_users:
+        subscribed_users.add(chat_id)
+        print(f"User subscribed: {chat_id}")  # Debugging log
+        await update.message.reply_text("You are now subscribed to coin purchase notifications!")
+    else:
+        await update.message.reply_text("You are already subscribed!")
+
+
+# Telegram command: /stop
+async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    if chat_id in subscribed_users:
+        subscribed_users.remove(chat_id)
+        print(f"User unsubscribed: {chat_id}")  # Debugging log
+        await update.message.reply_text("You have unsubscribed from notifications.")
+    else:
+        await update.message.reply_text("You are not subscribed.")
+
+
 # Function to fetch signatures for a specific wallet address
 def get_signatures_for_address(pubkey, limit=5):
     payload = {
@@ -97,28 +119,6 @@ async def monitor_wallets():
                 print(f"Error monitoring wallet {wallet}: {e}")
 
         await asyncio.sleep(10)  # Monitor every 10 seconds
-
-
-# Telegram command: /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.effective_chat.id
-    if chat_id not in subscribed_users:
-        subscribed_users.add(chat_id)
-        print(f"Subscribed users: {subscribed_users}")  # Debugging
-        await update.message.reply_text("You are now subscribed to coin purchase notifications!")
-    else:
-        await update.message.reply_text("You are already subscribed!")
-
-
-# Telegram command: /stop
-async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.effective_chat.id
-    if chat_id in subscribed_users:
-        subscribed_users.remove(chat_id)
-        print(f"Unsubscribed users: {subscribed_users}")  # Debugging
-        await update.message.reply_text("You have unsubscribed from notifications.")
-    else:
-        await update.message.reply_text("You are not subscribed.")
 
 
 # Main function
