@@ -1,3 +1,4 @@
+import asyncio
 import requests
 from telegram import Update, Bot
 from telegram.ext import (
@@ -9,9 +10,9 @@ from telegram.ext import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # Telegram Bot Token
-TELEGRAM_TOKEN = "8082481347:AAEx9n_F4tQBskUS0sGmCqQJLnP375fiq4Y"
+TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 
-# Solscan API Key
+# Solscan API Key (Replace with your provided API key)
 SOLSCAN_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjcmVhdGVkQXQiOjE3MzQyNjQ1Mjk1MTcsImVtYWlsIjoic29uZ2luZGlhbjE2QGdtYWlsLmNvbSIsImFjdGlvbiI6InRva2VuLWFwaSIsImFwaVZlcnNpb24iOiJ2MiIsImlhdCI6MTczNDI2NDUyOX0.gTWa20HeXjgBhbqH2t0XyjU0W030Hd1Ck5HLBmSeXgU"
 
 # Solscan API Base URL
@@ -96,6 +97,11 @@ async def fetch_and_notify(application: Application) -> None:
 
 # Main function
 def main():
+    # Create the asyncio event loop
+    asyncio.run(async_main())
+
+
+async def async_main():
     # Telegram application setup
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
@@ -110,9 +116,8 @@ def main():
 
     # Start the bot
     print("Bot is running...")
-    application.run_polling()
+    await application.run_polling()
 
 
 if __name__ == "__main__":
     main()
-    
