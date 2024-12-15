@@ -2,7 +2,7 @@ import requests
 import random
 import time
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 # Constants
 TELEGRAM_BOT_TOKEN = "8082481347:AAH45hUl4NzxT6f9xqD5X3OV9rcF1FZCWrs"  # Replace with your Telegram Bot token
@@ -129,48 +129,46 @@ def automate_commenting(coin_address, coin_name, use_ai=False):
         return "Failed to post comment."
 
 # Telegram Bot Commands
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text(
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
         "Welcome! Use the command /help to understand how to use this bot."
     )
 
-def help_command(update: Update, context: CallbackContext):
-    update.message.reply_text(
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
         "Send the coin address and name in this format: \n"
         "/comment <coin_address> <coin_name>\n"
         "Example: /comment example_coin_address AmazingCoin"
     )
 
-def comment(update: Update, context: CallbackContext):
+async def comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         args = context.args
         if len(args) < 2:
-            update.message.reply_text("Usage: /comment <coin_address> <coin_name>")
+            await update.message.reply_text("Usage: /comment <coin_address> <coin_name>")
             return
 
         coin_address = args[0]
         coin_name = " ".join(args[1:])
-        update.message.reply_text(f"Starting commenting process on {coin_address}...")
+        await update.message.reply_text(f"Starting commenting process on {coin_address}...")
 
         # Automate Commenting
         result = automate_commenting(coin_address, coin_name, use_ai=False)
-        update.message.reply_text(result)
+        await update.message.reply_text(result)
     except Exception as e:
-        update.message.reply_text(f"An error occurred: {str(e)}")
+        await update.message.reply_text(f"An error occurred: {str(e)}")
 
 # Main Function
 def main():
-    updater = Updater(TELEGRAM_BOT_TOKEN)
-    dispatcher = updater.dispatcher
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
     # Register Handlers
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("help", help_command))
-    dispatcher.add_handler(CommandHandler("comment", comment))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("comment", comment))
 
     # Start the Bot
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 # Execute Script
 if __name__ == "__main__":
