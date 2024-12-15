@@ -1,4 +1,5 @@
 import requests
+from bs4 import BeautifulSoup
 from telegram import Update, Bot
 from telegram.ext import (
     Application,
@@ -8,13 +9,10 @@ from telegram.ext import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # Telegram Bot Token
-TELEGRAM_TOKEN = "8082481347:AAEBpazl2x-vMI4J-VN7YE2Vst9kXD_Eigw"
+TELEGRAM_TOKEN = "8082481347:AAEqgecNLjPckTPA-TQIH2-3g8-0B9O3HlA"
 
-# Solscan API Key
-SOLSCAN_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjcmVhdGVkQXQiOjE3MzQyNjQ1Mjk1MTcsImVtYWlsIjoic29uZ2luZGlhbjE2QGdtYWlsLmNvbSIsImFjdGlvbiI6InRva2VuLWFwaSIsImFwaVZlcnNpb24iOiJ2MiIsImlhdCI6MTczNDI2NDUyOX0.gTWa20HeXjgBhbqH2t0XyjU0W030Hd1Ck5HLBmSeXgU"
-
-# Solscan API Base URL
-SOLSCAN_API_BASE = "https://api.solscan.io/v1.0"
+# Solscan URL for scraping
+SOLSCAN_URL = "https://solscan.io/"
 
 # List of active chat IDs
 subscribed_users = set()  # Stores user chat IDs
@@ -45,32 +43,63 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("You are not subscribed.")
 
 
+# Scrape transactions from Solscan
+def scrape_transactions():
+    response = requests.get(SOLSCAN_URL)
+    if response.status_code != 200:
+        print(f"Error fetching data: {response.status_code}")
+        return []
+
+    soup = BeautifulSoup(response.content, "lxml")
+
+    # Find the latest transactions table
+    transactions_table = soup.find("table", {"class": "table"})
+    if not transactions_table:
+        print("Error: Transactions table not found")
+        return []
+
+    # Extract rows from the table
+    rows = transactions_table.find("tbody").find_all("tr")
+
+    transactions = []
+    for row in rows:
+        cols = row.find_all("td")
+        tx_hash = cols[0].text.strip()
+        token = cols[1].text.strip()
+        amount = cols[2].text.strip()
+        buyer = cols[3].text.strip()  # Adjust index based on actual HTML
+        seller = cols[4].text.strip()  # Adjust index based on actual HTML
+        timestamp = cols[5].text.strip()  # Adjust index based on actual HTML
+
+        transactions.append({
+            "txHash": tx_hash,
+            "token": token,
+            "amount": amount,
+            "buyer": buyer,
+            "seller": seller,
+            "timestamp": timestamp,
+        })
+
+    return transactions
+
+
 # Fetch transactions and notify users
 async def fetch_and_notify(application: Application) -> None:
     global processed_transactions
 
-    url = f"{SOLSCAN_API_BASE}/transactions/latest"  # Endpoint for recent transactions
-
-    headers = {
-        "Authorization": f"Bearer {SOLSCAN_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    # Fetch data from Solscan
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        print(f"Error fetching data: {response.text}")
+    # Scrape transactions
+    transactions = scrape_transactions()
+    if not transactions:
+        print("No transactions found.")
         return
 
-    # Process transactions
-    data = response.json()
-    transactions = data.get("data", [])
     for transaction in transactions:
-        tx_hash = transaction.get("txHash")
-        token_symbol = transaction.get("tokenSymbol", "Unknown Token")
-        amount = float(transaction.get("amount", 0))
-        buyer = transaction.get("source", "N/A")  # Buyer address
-        seller = transaction.get("destination", "N/A")  # Seller address
+        tx_hash = transaction["txHash"]
+        token = transaction["token"]
+        amount = transaction["amount"]
+        buyer = transaction["buyer"]
+        seller = transaction["seller"]
+        timestamp = transaction["timestamp"]
 
         # Skip already processed transactions
         if tx_hash in processed_transactions:
@@ -78,21 +107,19 @@ async def fetch_and_notify(application: Application) -> None:
 
         processed_transactions.add(tx_hash)
 
-        # Identify "buy" transactions
-        if amount > 0 and buyer != "N/A" and seller != "N/A":
-            # Notify all subscribed users
-            for chat_id in subscribed_users:
-                message = (
-                    f"🚨 New Coin Purchase Detected 🚨\n"
-                    f"- Token: {token_symbol}\n"
-                    f"- Amount Bought: {amount}\n"
-                    f"- Buyer: {buyer}\n"
-                    f"- Seller: {seller}\n"
-                    f"- Tx Hash: {tx_hash}\n"
-                    f"- Timestamp: {transaction.get('blockTime', 'N/A')}"
-                )
-                bot: Bot = application.bot
-                await bot.send_message(chat_id=chat_id, text=message)
+        # Notify all subscribed users
+        for chat_id in subscribed_users:
+            message = (
+                f"🚨 New Coin Purchase Detected 🚨\n"
+                f"- Token: {token}\n"
+                f"- Amount Bought: {amount}\n"
+                f"- Buyer: {buyer}\n"
+                f"- Seller: {seller}\n"
+                f"- Tx Hash: {tx_hash}\n"
+                f"- Timestamp: {timestamp}"
+            )
+            bot: Bot = application.bot
+            await bot.send_message(chat_id=chat_id, text=message)
 
 
 # Main function
@@ -100,9 +127,9 @@ def main():
     # Telegram application setup
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # Schedule task to fetch transactions every 10 seconds
+    # Schedule task to fetch transactions every 8 seconds
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(fetch_and_notify, "interval", seconds=10, args=[application])  # 10-second interval
+    scheduler.add_job(fetch_and_notify, "interval", seconds=8, args=[application])  # 8-second interval
     scheduler.start()
 
     # Command handlers
@@ -116,4 +143,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
