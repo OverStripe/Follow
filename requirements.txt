@@ -1,0 +1,6 @@
+flask
+requests
+beautifulsoup4
+fake-useragent
+python-telegram-bot
+sqlite3
