@@ -1,145 +1,128 @@
 import requests
-from bs4 import BeautifulSoup
+import json
+import asyncio
 from telegram import Update, Bot
 from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
 )
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-# Telegram Bot Token
-TELEGRAM_TOKEN = "8082481347:AAGl1LqSwQgWoaX-GBIKtdcTncebS6HQl3o"
+# Solana RPC endpoint
+rpc_url = "https://mainnet.helius-rpc.com/?api-key=3306ede2-b0da-4ea3-a571-50369811ddb4"
 
-# Solscan URL for scraping
-SOLSCAN_URL = "https://solscan.io/"
+# Exchange wallet addresses to monitor
+exchange_wallets = [
+    "A77HErqtfN1hLLpvZ9pCtu66FEtM8BveoaKbbMoZ4RiR",  # Example Wallet
+    "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9",  # Example Wallet
+]
 
-# List of active chat IDs
-subscribed_users = set()  # Stores user chat IDs
+# Telegram bot setup
+telegram_bot_token = "7709293848:AAFpmhubng8CYFbzbIpnRNLEf9GJJ4mm6IU"  # Replace with your bot token
+bot = Bot(token=telegram_bot_token)
 
-# Track processed transactions
-processed_transactions = set()
+# Track subscribed users
+subscribed_users = set()
 
 
-# Command: Start
+# Function to get signatures for the address
+def get_signatures_for_address(pubkey, limit=5):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getSignaturesForAddress",
+        "params": [pubkey, {"limit": limit}],
+    }
+    response = requests.post(rpc_url, json=payload)
+    return response.json()
+
+
+# Function to get transaction details for a given signature
+def get_transaction(signature):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getTransaction",
+        "params": [signature, {"maxSupportedTransactionVersion": 0}],
+    }
+    response = requests.post(rpc_url, json=payload)
+    return response.json()
+
+
+# Monitor wallets for coin purchases and notify
+async def monitor_wallets():
+    processed_signatures = set()
+
+    while True:
+        for wallet in exchange_wallets:
+            signatures_response = get_signatures_for_address(wallet)
+            if "result" not in signatures_response or len(signatures_response["result"]) == 0:
+                continue
+
+            for signature_info in signatures_response["result"]:
+                signature = signature_info["signature"]
+
+                if signature in processed_signatures:
+                    continue
+                processed_signatures.add(signature)
+
+                transaction_response = get_transaction(signature)
+                if "result" not in transaction_response or not transaction_response["result"]:
+                    continue
+
+                transaction = transaction_response["result"]
+                message = transaction["transaction"]["message"]
+                account_keys = message["accountKeys"]
+                instructions = message["instructions"]
+
+                # Process instructions to detect coin purchases
+                for instruction in instructions:
+                    program_id = instruction.get("programIdIndex")
+                    if account_keys[program_id] == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA":
+                        # Extract details from the transaction
+                        buyer = account_keys[instruction["accounts"][0]]
+                        token_address = account_keys[instruction["accounts"][-1]]
+                        amount = instruction.get("data", "Unknown Amount")
+
+                        # Create the notification message
+                        notification_message = (
+                            f"🚨 Coin Purchase Detected 🚨\n"
+                            f"- Buyer Address: {buyer}\n"
+                            f"- Token Address: {token_address}\n"
+                            f"- Amount Purchased: {amount}\n"
+                            f"- Transaction Hash: {signature}\n"
+                        )
+
+                        # Send notification to all subscribed users
+                        for chat_id in subscribed_users:
+                            await bot.send_message(chat_id=chat_id, text=notification_message)
+
+        await asyncio.sleep(5)  # Monitor every 5 seconds
+
+
+# Telegram command: /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     if chat_id not in subscribed_users:
         subscribed_users.add(chat_id)
-        await update.message.reply_text(
-            "You are now subscribed to receive coin purchase notifications."
-        )
+        await update.message.reply_text("You are now subscribed to coin purchase notifications!")
     else:
-        await update.message.reply_text("You are already subscribed.")
-
-
-# Command: Stop
-async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.effective_chat.id
-    if chat_id in subscribed_users:
-        subscribed_users.remove(chat_id)
-        await update.message.reply_text("You have unsubscribed from purchase notifications.")
-    else:
-        await update.message.reply_text("You are not subscribed.")
-
-
-# Scrape transactions from Solscan
-def scrape_transactions():
-    response = requests.get(SOLSCAN_URL)
-    if response.status_code != 200:
-        print(f"Error fetching data: {response.status_code}")
-        return []
-
-    soup = BeautifulSoup(response.content, "lxml")
-
-    # Find the latest transactions table
-    transactions_table = soup.find("table", {"class": "table"})
-    if not transactions_table:
-        print("Error: Transactions table not found")
-        return []
-
-    # Extract rows from the table
-    rows = transactions_table.find("tbody").find_all("tr")
-
-    transactions = []
-    for row in rows:
-        cols = row.find_all("td")
-        tx_hash = cols[0].text.strip()
-        token = cols[1].text.strip()
-        amount = cols[2].text.strip()
-        buyer = cols[3].text.strip()  # Adjust index based on actual HTML
-        seller = cols[4].text.strip()  # Adjust index based on actual HTML
-        timestamp = cols[5].text.strip()  # Adjust index based on actual HTML
-
-        transactions.append({
-            "txHash": tx_hash,
-            "token": token,
-            "amount": amount,
-            "buyer": buyer,
-            "seller": seller,
-            "timestamp": timestamp,
-        })
-
-    return transactions
-
-
-# Fetch transactions and notify users
-async def fetch_and_notify(application: Application) -> None:
-    global processed_transactions
-
-    # Scrape transactions
-    transactions = scrape_transactions()
-    if not transactions:
-        print("No transactions found.")
-        return
-
-    for transaction in transactions:
-        tx_hash = transaction["txHash"]
-        token = transaction["token"]
-        amount = transaction["amount"]
-        buyer = transaction["buyer"]
-        seller = transaction["seller"]
-        timestamp = transaction["timestamp"]
-
-        # Skip already processed transactions
-        if tx_hash in processed_transactions:
-            continue
-
-        processed_transactions.add(tx_hash)
-
-        # Notify all subscribed users
-        for chat_id in subscribed_users:
-            message = (
-                f"🚨 New Coin Purchase Detected 🚨\n"
-                f"- Token: {token}\n"
-                f"- Amount Bought: {amount}\n"
-                f"- Buyer: {buyer}\n"
-                f"- Seller: {seller}\n"
-                f"- Tx Hash: {tx_hash}\n"
-                f"- Timestamp: {timestamp}"
-            )
-            bot: Bot = application.bot
-            await bot.send_message(chat_id=chat_id, text=message)
+        await update.message.reply_text("You are already subscribed!")
 
 
 # Main function
-def main():
-    # Telegram application setup
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+async def main():
+    app = Application.builder().token(telegram_bot_token).build()
 
-    # Schedule task to fetch transactions every 8 seconds
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(fetch_and_notify, "interval", seconds=8, args=[application])  # 8-second interval
-    scheduler.start()
+    # Add command handlers
+    app.add_handler(CommandHandler("start", start))
 
-    # Command handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("stop", stop))
+    # Start monitoring wallets
+    asyncio.create_task(monitor_wallets())
 
-    # Start the bot and let Application manage the event loop
     print("Bot is running...")
-    application.run_polling()
+    await app.run_polling()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
